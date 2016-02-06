@@ -1,0 +1,18 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = File
+Target = home/*
+Target = media/*
+Target = mnt/*
+Target = usr/local/*
+Target = srv/*
+Target = proc/*
+Target = sys/*
+Target = tmp/*
+
+[Action]
+Description = no compliant destination !
+When = PreTransaction
+Exec = /usr/bin/false
+AbortOnFail

@@ -1,0 +1,11 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = pacman-mirrorlist
+
+[Action]
+Description = run reflector
+When = PostTransaction
+Depends = reflector
+Exec = /etc/pacman.d/hooks.bin/pacman-mirrorlist.sh

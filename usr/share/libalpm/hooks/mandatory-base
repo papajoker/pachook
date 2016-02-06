@@ -1,0 +1,12 @@
+[Trigger]
+Operation = Remove
+Type = Package
+Target = pacman
+Target = bash
+
+
+[Action]
+Description = not remove this package !
+When = PreTransaction
+Exec = /usr/bin/false
+AbortOnFail

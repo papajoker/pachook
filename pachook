@@ -1,0 +1,189 @@
+#!/usr/bin/env bash
+#   packhook : a simple pacman hooks administrator
+#
+#   Copyright (c) 2016 papajoker <papajoke@archlinux.info>
+#
+#   This program is free software; you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation; either version 2 of the License, or
+#   (at your option) any later version.
+#
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+#set -x
+declare -r pkgname='packhook'
+declare -r version=0.1.0
+
+declare -A hooks
+declare -r CG='\033[0m\033[32m'
+declare -r CR='\033[0m\033[31m'
+declare -r CE='\033[0m'
+
+declare -r hookdirusr='/usr/share/libalpm/hooks/'
+hookdir=$(awk -F'=' '/^HookDir/ { print $2}' /etc/pacman.conf)
+[[ -z "${hookdir}" ]] && hookdir='/etc/pacman.d/hooks/'
+
+declare -r EDITOR="${EDITOR:-nano}"
+
+########## functions ##########
+
+usage() {
+	echo -e "Usage: ${pkgname} {command} \"hook_name\" "
+	echo -e "cat\nedit\nenable\ndisable\ncreate"
+} 
+
+runsudo(){
+    (($EUID != 0)) && sudo "$@" || "$@"
+}
+
+goodext(){
+    local fileh="$1" ext=${2:-hook}
+    [[ "${fileh##*.}" == "${ext}" ]] && return 0
+    return 1
+}
+
+list(){
+    local dir="$1" fileh=''
+    for fileh in $(find "${dir}" -maxdepth 1 -type f -printf "%f\n"); do
+        hooks[${fileh%.*}]="${dir}${fileh}"
+    done
+}
+
+listing(){
+    list "${hookdir}"
+    list "${hookdirusr}"
+}
+
+function yesno {
+    local response=''
+    while read -r -p "${1} ? [y/n]: " response; do
+        response=${response^^}
+        [[ "${response}" == "N" ]] && return 1 
+        [[ "${response}" == "Y" ]] && break
+    done
+    return 0
+}
+
+hooks.view(){
+    local hook='' pre=''
+    for hook in "${!hooks[@]}"; do
+        (goodext "${hooks[$hook]}") && pre="$CG" || pre="$CR"
+        printf "${pre}●$CE %-20s\t${hooks[$hook]}\n" "${hook}"
+    done
+}
+
+hook.view(){
+    local hook="$1" fileh='' pre='' hookbin=''
+    fileh="${hooks[${hook}]}"
+    [ -r "${fileh}" ] || exit 98
+    (goodext "${fileh}") && pre="$CG" || pre="$CR"
+    echo -e "$pre#${fileh}$CE"
+    cat "${fileh}"
+    
+    hookbin=$(awk -F'=' '/^Exec/ { print $2}' "${fileh}" | xargs)
+    hookbin="${hookbin%% *}"
+    if [[ -r "${hookbin}" && $(file -bi "${hookbin}" | cut -d\; -f1) == 'text/x-shellscript' ]]; then
+        echo -e "\n$pre#${hookbin}$CE"
+        cat "${hookbin}" 
+    fi
+}
+
+hook.edit(){
+    local hook="$1"
+    if [[ -f "${hooks[${hook}]}" && ! "${hooks[${hook}]}" =~ "${hookdirusr}" ]]; then
+        runsudo "${EDITOR}" "${hooks[${hook}]}"
+    fi
+}
+
+hook.enable(){
+    local hook="$1" fileh=''
+    fileh="${hooks[${hook}]}"
+    (goodext "${fileh}") && return 0
+    runsudo mv "${fileh}" "${fileh}.hook"
+    listing
+    hooks.view
+}
+
+hook.disable(){
+    local hook="$1" fileh='' 
+    fileh="${hooks[${hook}]}"
+    (goodext "${fileh}") || return 0
+    runsudo mv "${fileh}" "${fileh%.*}"
+    listing
+    hooks.view
+}
+
+hook.create(){
+model="[Trigger]
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Type = %s
+%s
+
+[Action]
+Description = %s
+When = %sTransaction
+Exec = /usr/bin/true
+%s
+%s"
+    local post="Post" fail='' list='' desc='' type='Package' target='' t=''
+    declare -a targets
+    
+    local hook="$1"
+    if [ -z "${hook}" ]; then
+        read -r -p "Hook name: " hook;
+    fi
+    hook=${hook,,}
+    if [[ "${hooks[$hook]}" != '' ]] &>/dev/null; then
+        echo "Error: hook \"${hook}\" exist"
+        return 97
+    fi
+    
+    read -r -p "Description: " desc;
+    (yesno "On Packages") || type='File'
+
+    echo "Target(s) (*=all):"
+    while read -r t; do
+        [ -z "${t}" ] && break
+        [[ "${t:0:1}" == '/' ]]  && t=${t#\/}
+        [[ "${t:0:2}" == '!/' ]] && t=${t/\//}
+        target="${target}Target = ${t}\n"
+    done
+    target=$(echo -e "${target}")
+    
+    if (! yesno "Post transaction"); then
+        post='Pre'
+        (yesno "fail if error") && fail='AbortOnFail'
+    fi
+    
+    (yesno "Paste targets in stdin") && list='NeedsTargets'
+    runsudo touch "${hookdir}${hook}.hook"
+    printf "$model" "${type}" "${target}" "${desc}" "${post}" "${list}" "${fail}" | sudo tee "${hookdir}${hook}.hook" 1>/dev/null
+    listing
+    hook.edit "${hook}"
+}
+
+########## run ##########
+
+listing
+if [ -n "$2" -a "$1" != "create" ]; then
+    [ -f "${hooks[$2]}" ] &>/dev/null || { echo "hook not found"; exit 99; }
+    hook="$2"
+fi
+
+case "$1" in
+             cat)  hook.view "${hook}";;
+            edit)  hook.edit "${hook}";;
+          create)  hook.create "$2";;
+    enable|start)  hook.enable "${hook}";;
+    disable|stop)  hook.disable "${hook}";;
+              -h)  usage;;
+               *)  hooks.view 
+esac
