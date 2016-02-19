@@ -88,7 +88,7 @@ hook.view(){
     
     hookbin=$(awk -F'=' '/^Exec/ { print $2}' "${fileh}" | xargs)
     hookbin="${hookbin%% *}"
-    if [[ -r "${hookbin}" && $(file -bi "${hookbin}" | cut -d\; -f1) == 'text/x-shellscript' ]]; then
+    if [[ -r "${hookbin}" && $(file -bi "${hookbin}") =~ 'text' ]]; then
         echo -e "\n$pre#${hookbin}$CE"
         cat "${hookbin}" 
     fi
@@ -101,22 +101,18 @@ hook.edit(){
     fi
 }
 
-hook.enable(){
-    local hook="$1" fileh=''
-    fileh="${hooks[${hook}]}"
-    (goodext "${fileh}") && return 0
-    runsudo mv "${fileh}" "${fileh}.hook"
-    listing
-    hooks.view
-}
-
-hook.disable(){
-    local hook="$1" fileh='' 
-    fileh="${hooks[${hook}]}"
-    (goodext "${fileh}") || return 0
-    runsudo mv "${fileh}" "${fileh%.*}"
-    listing
-    hooks.view
+hook.setstate(){
+   local hook="$1" fileh=''
+   fileh="${hooks[${hook}]}"
+   if [[ "$2" == "enable" ]]; then
+      (goodext "${fileh}") && return 0
+      runsudo mv "${fileh}" "${fileh}.hook"
+   else
+      (goodext "${fileh}") || return 0
+      runsudo mv "${fileh}" "${fileh%.*}"
+   fi
+   listing
+   hooks.view
 }
 
 hook.create(){
@@ -182,8 +178,8 @@ case "$1" in
              cat)  hook.view "${hook}";;
             edit)  hook.edit "${hook}";;
           create)  hook.create "$2";;
-    enable|start)  hook.enable "${hook}";;
-    disable|stop)  hook.disable "${hook}";;
+   enable|start)  hook.setstate "${hook}" enable;;
+   disable|stop)  hook.setstate "${hook}" disable;;
               -h)  usage;;
                *)  hooks.view 
 esac
