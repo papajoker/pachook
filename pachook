@@ -72,7 +72,8 @@ function yesno {
 
 hooks.view(){
     local hook='' pre=''
-    for hook in "${!hooks[@]}"; do
+    local sorts=($(echo ${!hooks[@]} | sed 's/ /\n/g' | sort))
+    for hook in "${sorts[@]}"; do
         (goodext "${hooks[$hook]}") && pre="$CG" || pre="$CR"
         printf "${pre}●$CE %-20s\t${hooks[$hook]}\n" "${hook}"
     done
