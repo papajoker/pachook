@@ -18,7 +18,7 @@
 #
 #set -x
 declare -r pkgname='packhook'
-declare -r version=0.1.0
+declare -r version=0.1.1
 
 declare -A hooks
 declare -r CG='\033[0m\033[32m'
@@ -43,13 +43,13 @@ runsudo(){
 }
 
 goodext(){
-    local fileh="$1" ext=${2:-hook}
+    declare fileh="$1" ext=${2:-hook}
     [[ "${fileh##*.}" == "${ext}" ]] && return 0
     return 1
 }
 
 list(){
-    local dir="$1" fileh=''
+    declare dir="$1" fileh=''
     for fileh in $(find "${dir}" -maxdepth 1 -type f -printf "%f\n"); do
         hooks[${fileh%.*}]="${dir}${fileh}"
     done
@@ -61,7 +61,7 @@ listing(){
 }
 
 function yesno {
-    local response=''
+    declare response=''
     while read -r -p "${1} ? [y/n]: " response; do
         response=${response^^}
         [[ "${response}" == "N" ]] && return 1 
@@ -71,8 +71,8 @@ function yesno {
 }
 
 hooks.view(){
-    local hook='' pre=''
-    local sorts=($(echo ${!hooks[@]} | sed 's/ /\n/g' | sort))
+    declare hook='' pre=''
+    declare sorts=($(echo ${!hooks[@]} | sed 's/ /\n/g' | sort))
     for hook in "${sorts[@]}"; do
         (goodext "${hooks[$hook]}") && pre="$CG" || pre="$CR"
         printf "${pre}●$CE %-20s\t${hooks[$hook]}\n" "${hook}"
@@ -80,7 +80,7 @@ hooks.view(){
 }
 
 hook.view(){
-    local hook="$1" fileh='' pre='' hookbin=''
+    declare hook="$1" fileh='' pre='' hookbin=''
     fileh="${hooks[${hook}]}"
     [ -r "${fileh}" ] || exit 98
     (goodext "${fileh}") && pre="$CG" || pre="$CR"
@@ -96,14 +96,20 @@ hook.view(){
 }
 
 hook.edit(){
-    local hook="$1"
+    declare hook="$1"
     if [[ -f "${hooks[${hook}]}" && ! "${hooks[${hook}]}" =~ "${hookdirusr}" ]]; then
-        runsudo "${EDITOR}" "${hooks[${hook}]}"
+        declare hookbin=$(awk -F= '/^Exec/ { print $2}' "${hooks[${hook}]}" | xargs)
+        hookbin="${hookbin%% *}"
+        if [[ $(file -bi "${hookbin}") =~ 'text' ]]; then
+            runsudo "${EDITOR}" "${hooks[${hook}]}" "$hookbin"
+        else
+            runsudo "${EDITOR}" "${hooks[${hook}]}"
+        fi
     fi
 }
 
 hook.setstate(){
-   local hook="$1" fileh=''
+   declare hook="$1" fileh=''
    fileh="${hooks[${hook}]}"
    if [[ "$2" == "enable" ]]; then
       (goodext "${fileh}") && return 0
@@ -130,10 +136,10 @@ When = %sTransaction
 Exec = /usr/bin/true
 %s
 %s"
-    local post="Post" fail='' list='' desc='' type='Package' target='' t=''
+    declare post="Post" fail='' list='' desc='' type='Package' target='' t=''
     declare -a targets
     
-    local hook="$1"
+    declare hook="$1"
     if [ -z "${hook}" ]; then
         read -r -p "Hook name: " hook;
     fi
