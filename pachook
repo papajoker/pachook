@@ -30,16 +30,18 @@ hookdir=$(awk -F'=' '/^HookDir/ { print $2}' /etc/pacman.conf)
 [[ -z "${hookdir}" ]] && hookdir='/etc/pacman.d/hooks/'
 
 declare -r EDITOR="${EDITOR:-nano}"
-unset DESCRIPTIONS ONLYFILES ONLYPACKAGES
+unset DESCRIPTIONS ONLYFILES ONLYPACKAGES PREINST POSTINST
 
 ########## functions ##########
 
 usage() {
-	echo -e "Usage: ${pkgname} [-lfp] {command} \"hook_name\" "
+	echo -e "Usage: ${pkgname} [-lfpbe] {command} \"hook_name\" "
 	echo -e "cat\nedit\nenable\ndisable\ncreate"
     echo -e "\noptions:\n\t-l : show Descriptions"
     echo -e "\t-f : show only target Files"
     echo -e "\t-p : show only target Packages"
+    echo -e "\t-b : show only pre-install"
+    echo -e "\t-e : show only post-install"
 } 
 
 runsudo(){
@@ -87,7 +89,19 @@ hooks.view(){
             fi
         fi
         if ((ONLYPACKAGES)); then
-            if [[ -n $(grep -i "Type.*File" "${hooks[$hook]}") ]]; then
+            if [[ -z $(grep -i "Type.*Package" "${hooks[$hook]}") ]]; then
+                unset "sorts[$i]"
+                continue
+            fi
+        fi
+        if ((PREINST)); then
+            if [[ -z $(grep -i "When.*PreTransaction" "${hooks[$hook]}") ]]; then
+                unset "sorts[$i]"
+                continue
+            fi
+        fi
+        if ((POSTINST)); then
+            if [[ -z $(grep -i "When.*PostTransaction" "${hooks[$hook]}") ]]; then
                 unset "sorts[$i]"
                 continue
             fi
@@ -205,12 +219,12 @@ Exec = /usr/bin/true
 ########## run ##########
 
 listing
-if [ -n "$2" -a "$1" != "create" ]; then
+if [[ -n "$2" && "$1" != "create" && "${1:0:1}" != "-" ]]; then
     [ -f "${hooks[$2]}" ] &>/dev/null || { echo "hook not found"; exit 99; }
     hook="$2"
 fi
 
-if [[ "$#" == "1" && "${1:0:1}" == "-" ]]; then
+#if [[ "$#" == "1" && "${1:0:1}" == "-" ]]; then
 
     explode_args() {
         unset OPTS
@@ -244,17 +258,19 @@ if [[ "$#" == "1" && "${1:0:1}" == "-" ]]; then
             -l | --desc ) DESCRIPTIONS=1;;
             -p | --pkg) ONLYPACKAGES=1;;
             -f | --file) ONLYFILES=1;;
+            -b | --begin) PREINST=1;;
+            -e | --end) POSTINST=1;;
         esac
     done
     unset OPTS
-fi
+#fi
 
 case "$1" in
-             cat)  hook.view "${hook}";;
-            edit)  hook.edit "${hook}";;
-          create)  hook.create "$2";;
+            cat)  hook.view "${hook}";;
+           edit)  hook.edit "${hook}";;
+         create)  hook.create "$2";;
    enable|start)  hook.setstate "${hook}" enable;;
    disable|stop)  hook.setstate "${hook}" disable;;
-              -h)  usage;;
-               *)  hooks.view 
+             -h)  usage;;
+              *)  hooks.view
 esac
