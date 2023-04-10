@@ -271,6 +271,6 @@ case "$1" in
          create)  hook.create "$2";;
    enable|start)  hook.setstate "${hook}" enable;;
    disable|stop)  hook.setstate "${hook}" disable;;
-             -h)  usage;;
+             -h|--help)  usage;;
               *)  hooks.view
 esac

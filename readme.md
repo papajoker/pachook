@@ -7,7 +7,7 @@ Archlinux pacman hooks administrator with disabled exemples
 ## Installation
 With AUR :
 
-    yaourt -S pachook
+    yay -S pachook
     
 or :
 
